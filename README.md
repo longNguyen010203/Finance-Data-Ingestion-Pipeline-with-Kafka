@@ -1,0 +1,1 @@
+# Finance Data Ingestion Pipeline with Kafka
