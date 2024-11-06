@@ -38,10 +38,11 @@ class MinioConnectHook(BaseHook):
         access_key: str, 
         secret_key: str, 
         secure: bool, 
-        logger_name: str | None = None
+        logger_name: str | None = None,
+        *args, **kwargs
     ) -> None:
         
-        super().__init__(logger_name)
+        super().__init__(logger_name, *args, **kwargs)
         self.endpoint = endpoint
         self.access_key = access_key
         self.secret_key = secret_key
@@ -50,6 +51,8 @@ class MinioConnectHook(BaseHook):
         
         
     def get_connect_minio(self) -> Minio:
+        """Function that initiates a new connection to your external tool."""
+        
         try:
             client = Minio(
                 endpoint=self.endpoint,
@@ -57,7 +60,9 @@ class MinioConnectHook(BaseHook):
                 secret_key=self.secret_key,
                 secure=self.secure
             )
+            logger.exception("Connect to Minio success.")
             return client
+        
         except Exception as e:
             logger.exception("Connect to Minio failed.")
             raise e
