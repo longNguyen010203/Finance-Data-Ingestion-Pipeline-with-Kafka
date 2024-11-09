@@ -18,6 +18,12 @@ logging.basicConfig(level=logging.INFO)
 
 
 
+KAFKA_NODES = os.getenv("KAFKA_NODES")
+producer = KafkaProducer(bootstrap_servers=[KAFKA_NODES],
+    value_serializer=lambda m: json.dumps(m).encode("utf-8")
+)
+
+
 class StockFinanceMetrics:
     """
     :param tickerSymbols
@@ -34,10 +40,11 @@ class StockFinanceMetrics:
         """
         
         try:
-            if stock_code in stock_code_constant.STOCKCODE:
-                # logger.info(f"Connect success to {self.nameSource}.")
-                return YahooFinanceAPI.Ticker(stock_code)
-            else: logger.info(f"Connect failed to {self.nameSource}.")
+            if stock_code_constant.STOCKCODE is not None:
+                if stock_code in stock_code_constant.STOCKCODE:
+                    # logger.info(f"Connect success to {self.nameSource}.")
+                    return YahooFinanceAPI.Ticker(stock_code)
+                else: logger.info(f"Connect failed to {self.nameSource}.")
         except Exception as e: raise e
         
         
@@ -77,10 +84,17 @@ class StockFinanceMetrics:
             getStockInformationDF["ticker"] = stock_code
             pd.set_option('display.max_rows', None)
             
-            record_data = getStockInformationDF.tail(2).head(1).to_json(
-                date_format='iso',
-                orient="records"            
-            )
+            records_latest: pd.DataFrame = getStockInformationDF.tail(2)
+            if records_latest is not None:
+                if records_latest.shape[0] == 2:
+                    record_data = records_latest.head(1).to_json(
+                        date_format='iso',
+                        orient="records"            
+                    )
+                else: 
+                    logger.warning(f"The required record has not appeared yet.")
+            else: 
+                logger.error(f"Dataframe is already exists.")
             # time.sleep(seconds=0.5)
             return json.loads(str(record_data)[1:-1])
         
@@ -97,11 +111,6 @@ class StockFinanceMetrics:
         """
         
         try:
-            KAFKA_NODES = os.getenv("KAFKA_NODES")
-            producer = KafkaProducer(bootstrap_servers=[KAFKA_NODES],
-                value_serializer=lambda m: json.dumps(m).encode("utf-8")
-            )
-            
             while True:
                 for stock_code in stock_code_constant.STOCKCODE:
                     stock_json_record = self.get_OHLCV_data_realtime(
