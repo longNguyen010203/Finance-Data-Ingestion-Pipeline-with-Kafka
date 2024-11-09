@@ -23,6 +23,7 @@ producer = KafkaProducer(bootstrap_servers=[KAFKA_NODES],
     value_serializer=lambda m: json.dumps(m).encode("utf-8")
 )
 
+
 class StockFinnhubMetrics:
     """ 
     :param api_key:
