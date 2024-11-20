@@ -121,7 +121,7 @@ class StockFinanceMetrics:
                     )
                     print(stock_json_record)
                     producer.send(topic=topic, value=stock_json_record)
-                    producer.flush()
+                    # producer.flush()
                     time.sleep(0.2)
                     
                 time.sleep(20)
@@ -137,4 +137,4 @@ class StockFinanceMetrics:
 if __name__ == "__main__":
     stock = StockFinanceMetrics()
     # print(stock.get_OHLCV_data_realtime("AAPL"))
-    stock.get_OHLCVs_data_realtime()
+    stock.get_OHLCVs_data_realtime("yfinance_stock")
