@@ -6,7 +6,7 @@ In this project, I built a real-time data ingestion pipeline with Apache Kafka a
 
 <img src="./images/about_project.png" style="width: 100%;">
 
-## ⚡ Workflow
+## 🚀 Workflow
 
 <img src="./images/workflow_financial.png" style="width: 100%;">
 
