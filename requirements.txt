@@ -1,3 +1,11 @@
-yfinance==0.2.44
-apache-airflow==2.10.2
+kafka-python-ng==2.2.3
+kafka-python==2.0.2
 apache-airflow-providers-apache-kafka==1.6.1
+pyspark==3.5.0
+# python-dotenv==1.0.1
+# minio==7.2.10
+# yfinance==0.2.48
+# pandas==2.2.3
+# apache-airflow==2.10.2
+# finnhub-python==2.4.21
+# websocket-client==1.8.0
