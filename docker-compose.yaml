@@ -1,3 +1,4 @@
+version: "3.9"
 # Licensed to the Apache Software Foundation (ASF) under one
 # or more contributor license agreements.  See the NOTICE file
 # distributed with this work for additional information
@@ -24,7 +25,7 @@
 # The following variables are supported:
 #
 # AIRFLOW_IMAGE_NAME           - Docker image name used to run Airflow.
-#                                Default: apache/airflow:2.10.2
+#                                Default: apache/airflow:2.10.3
 # AIRFLOW_UID                  - User ID in Airflow containers
 #                                Default: 50000
 # AIRFLOW_PROJ_DIR             - Base path to which all the files will be volumed.
@@ -49,18 +50,18 @@ x-airflow-common:
   # In order to add custom dependencies or upgrade provider packages you can use your extended image.
   # Comment the image line, place your Dockerfile in the directory where you placed the docker-compose.yaml
   # and uncomment the "build" line below, Then run `docker-compose build` to build the images.
-  image: ${AIRFLOW_IMAGE_NAME:-apache/airflow:2.10.2}
+  image: ${AIRFLOW_IMAGE_NAME:-financial_image:latest}
   # build: .
   environment:
     &airflow-common-env
-    AIRFLOW__CORE__EXECUTOR: CeleryExecutor
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
     AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
-    AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://airflow:airflow@postgres/airflow
-    AIRFLOW__CELERY__BROKER_URL: redis://:@redis:6379/0
     AIRFLOW__CORE__FERNET_KEY: ''
     AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
-    AIRFLOW__CORE__LOAD_EXAMPLES: 'true'
+    AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
     AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session'
+    AIRFLOW__CORE__SECRET_KEY: 'financial_secret'
+    AIRFLOW__WEBSERVER__SECRET_KEY: 'financial_secret'
     # yamllint disable rule:line-length
     # Use simple http server on scheduler for health checks
     # See https://airflow.apache.org/docs/apache-airflow/stable/administration-and-deployment/logging-monitoring/check-health.html#scheduler-health-check-server
@@ -80,12 +81,18 @@ x-airflow-common:
   user: "${AIRFLOW_UID:-50000}:0"
   depends_on:
     &airflow-common-depends-on
-    redis:
-      condition: service_healthy
     postgres:
       condition: service_healthy
+  networks:
+    - de_network
+
+  
 
 services:
+
+  ######################
+  ##  Apache Airflow  ##
+  ######################
   postgres:
     image: postgres:13
     environment:
@@ -100,20 +107,8 @@ services:
       retries: 5
       start_period: 5s
     restart: always
-
-  redis:
-    # Redis is limited to 7.2-bookworm due to licencing change
-    # https://redis.io/blog/redis-adopts-dual-source-available-licensing/
-    image: redis:7.2-bookworm
-    expose:
-      - 6379
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 30s
-      retries: 50
-      start_period: 30s
-    restart: always
+    networks:
+      - de_network
 
   airflow-webserver:
     <<: *airflow-common
@@ -131,6 +126,8 @@ services:
       <<: *airflow-common-depends-on
       airflow-init:
         condition: service_completed_successfully
+    networks:
+      - de_network
 
   airflow-scheduler:
     <<: *airflow-common
@@ -146,29 +143,8 @@ services:
       <<: *airflow-common-depends-on
       airflow-init:
         condition: service_completed_successfully
-
-  airflow-worker:
-    <<: *airflow-common
-    command: celery worker
-    healthcheck:
-      # yamllint disable rule:line-length
-      test:
-        - "CMD-SHELL"
-        - 'celery --app airflow.providers.celery.executors.celery_executor.app inspect ping -d "celery@$${HOSTNAME}" || celery --app airflow.executors.celery_executor.app inspect ping -d "celery@$${HOSTNAME}"'
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 30s
-    environment:
-      <<: *airflow-common-env
-      # Required to handle warm shutdown of the celery workers properly
-      # See https://airflow.apache.org/docs/docker-stack/entrypoint.html#signal-propagation
-      DUMB_INIT_SETSID: "0"
-    restart: always
-    depends_on:
-      <<: *airflow-common-depends-on
-      airflow-init:
-        condition: service_completed_successfully
+    networks:
+      - de_network
 
   airflow-triggerer:
     <<: *airflow-common
@@ -184,6 +160,8 @@ services:
       <<: *airflow-common-depends-on
       airflow-init:
         condition: service_completed_successfully
+    networks:
+      - de_network
 
   airflow-init:
     <<: *airflow-common
@@ -245,9 +223,12 @@ services:
       _AIRFLOW_WWW_USER_USERNAME: ${_AIRFLOW_WWW_USER_USERNAME:-airflow}
       _AIRFLOW_WWW_USER_PASSWORD: ${_AIRFLOW_WWW_USER_PASSWORD:-airflow}
       _PIP_ADDITIONAL_REQUIREMENTS: ''
+      AIRFLOW__CORE__SECRET_KEY: 'financial_secret'
     user: "0:0"
     volumes:
       - ${AIRFLOW_PROJ_DIR:-.}:/sources
+    networks:
+      - de_network
 
   airflow-cli:
     <<: *airflow-common
@@ -256,68 +237,102 @@ services:
     environment:
       <<: *airflow-common-env
       CONNECTION_CHECK_MAX_COUNT: "0"
+      AIRFLOW__CORE__SECRET_KEY: 'financial_secret'
     # Workaround for entrypoint issue. See: https://github.com/apache/airflow/issues/16252
     command:
       - bash
       - -c
       - airflow
-
-  # You can enable flower by adding "--profile flower" option e.g. docker-compose --profile flower up
-  # or by explicitly targeted on the command line e.g. docker-compose up flower.
-  # See: https://docs.docker.com/compose/profiles/
-  flower:
-    <<: *airflow-common
-    command: celery flower
-    profiles:
-      - flower
-    ports:
-      - "5555:5555"
-    healthcheck:
-      test: ["CMD", "curl", "--fail", "http://localhost:5555/"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 30s
-    restart: always
-    depends_on:
-      <<: *airflow-common-depends-on
-      airflow-init:
-        condition: service_completed_successfully
-
-  # MinIO
-  minio:
-    hostname: minio
-    image: minio/minio
-    container_name: minio
-    ports:
-      - 9001:9001
-      - 9000:9000
-    command: [ "server", "/data", "--console-address", ":9001" ]
-    volumes:
-      - ./minio:/data
-    env_file: .env
     networks:
       - de_network
 
-  mc:
-    image: minio/mc
-    container_name: mc
-    hostname: mc
-    env_file: .env
-    entrypoint: >
-      /bin/sh -c " until (/usr/bin/mc config host add minio
-      http://minio:9000 minio minio123) do echo '...waiting...' && sleep 1;
-      done; /usr/bin/mc mb minio/lakehouse; /usr/bin/mc policy set public
-      minio/lakehouse; exit 0; "
-    depends_on:
-      - minio
+
+  #######################
+  ##   Apache Kafka    ##
+  #######################
+  kafka:
+    image: docker.io/bitnami/kafka:3.7
+    container_name: kafka
+    ports:
+      - 9092:9092
+      - 9094:9094
+    # volumes:
+    #   - ./kafka_data:/bitnami
+    environment:
+      # KRaft settings
+      - KAFKA_CFG_NODE_ID=0
+      - KAFKA_CFG_PROCESS_ROLES=controller,broker
+      - KAFKA_CFG_CONTROLLER_QUORUM_VOTERS=0@kafka:9093
+      # Listeners
+      - KAFKA_CFG_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093,EXTERNAL://:9094
+      - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092,EXTERNAL://localhost:9094
+      - KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,EXTERNAL:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      - KAFKA_CFG_CONTROLLER_LISTENER_NAMES=CONTROLLER
+      - KAFKA_CFG_INTER_BROKER_LISTENER_NAME=PLAINTEXT
+      # Logging settings
+      - KAFKA_CFG_LOG_DIRS=/bitnami/kafka/data
+      - KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE=false
     networks:
       - de_network
 
-volumes:
-  postgres-db-volume:
+
+  #######################
+  ##   Apache Spark    ##
+  #######################
+  # spark-master:
+  #   image: custom-spark-image
+  #   container_name: spark-master
+  #   hostname: spark-master
+  #   # command: bin/spark-class org.apache.spark.deploy.master.Master
+  #   environment:
+  #     - SPARK_MODE=master
+  #     - SPARK_LOCAL_IP=spark-master
+  #     - SPARK_RPC_AUTHENTICATION_ENABLED=no
+  #     - SPARK_RPC_ENCRYPTION_ENABLED=no
+  #     - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
+  #     - SPARK_SSL_ENABLED=no
+  #   volumes:
+  #     - ./data:/opt/spark-data
+  #     - ./spark-defaults.conf:/opt/bitnami/spark/conf/spark-defaults.conf
+  #   expose:
+  #     - "7077"
+  #   ports:
+  #     - "7077:7077"
+  #     - "8081:8081"
+  #   networks:
+  #     - de_network
+
+  # spark-worker:
+  #   image: custom-spark-image
+  #   depends_on: 
+  #     - spark-master
+  #   # command: bin/spark-class org.apache.spark.deploy.worker.Worker spark://spark-master:7077
+  #   deploy: 
+  #     replicas: 3
+  #   environment:
+  #     - SPARK_MODE=worker
+  #     - SPARK_WORKER_CORES=2
+  #     - SPARK_WORKER_MEMORY=2g
+  #     - SPARK_MASTER_URL=spark://spark-master:7077
+  #     - SPARK_RPC_AUTHENTICATION_ENABLED=no
+  #     - SPARK_RPC_ENCRYPTION_ENABLED=no
+  #     - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
+  #     - SPARK_SSL_ENABLED=no
+  #   volumes:
+  #     - ./data:/opt/spark-data
+  #   networks:
+  #     - de_network
+
+
+  #######################
+  ##   Data Pipeline   ##
+  #######################
+
 
 networks:
   de_network:
     driver: bridge
     name: de_network
+
+volumes:
+  postgres-db-volume:
