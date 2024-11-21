@@ -1,1 +1,8 @@
 .py-venv/
+logs/
+
+__pycache__/
+.env
+
+data/
+kafka_data/
