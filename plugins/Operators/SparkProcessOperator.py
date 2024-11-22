@@ -55,13 +55,15 @@ class SparkProcessOperator(BaseOperator):
             if self._config is not None:
                 s_conn: SparkSession = SparkSession.builder \
                         .appName("{}-{}".format(self.appName, datetime.today())) \
-                        .master("spark://172.19.0.5:7077") \
-                        .config("spark.hadoop.fs.s3a.endpoint", "http://" + self._config["endpoint_url"]) \
+                        .config("spark.hadoop.fs.s3a.endpoint", "http://" + str(self._config["endpoint_url"])) \
                         .config("spark.hadoop.fs.s3a.access.key", str(self._config["aws_access_key_id"])) \
                         .config("spark.hadoop.fs.s3a.secret.key", str(self._config["aws_secret_access_key"])) \
                         .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem") \
                         .config("spark.hadoop.fs.s3a.path.style.access", "true") \
-                        .config("spark.jars", "/opt/bitnami/spark/jars/spark-sql-kafka-0-10_2.13-3.5.3.jar") \
+                        .config("spark.jars.packages", "org.apache.spark:spark-sql-kafka-0-10_2.13:3.5.0,"
+                                                       "com.datastax.spark:spark-cassandra-connector_2.13:3.5.0") \
+                        .config("spark.driver.extraJavaOptions", "-Djava.library.path=/opt/bitnami/spark/lib") \
+                        .config("spark.executor.extraJavaOptions", "-Djava.library.path=/opt/bitnami/spark/lib") \
                         .getOrCreate()
                         
                 s_conn.sparkContext.setLogLevel("ERROR")
