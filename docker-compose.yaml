@@ -62,6 +62,12 @@ x-airflow-common:
     AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session'
     AIRFLOW__CORE__SECRET_KEY: 'financial_secret'
     AIRFLOW__WEBSERVER__SECRET_KEY: 'financial_secret'
+    # SPARK_SUBMIT_BINARY: '/opt/bitnami/spark/bin/spark-submit'
+    JAVA_HOME: '/usr/lib/jvm/java-17-openjdk-amd64'
+    # SPARK_HOME: '/opt/bitnami/spark'
+    # SPARK_SUBMIT: '/opt/bitnami/spark/bin/spark-submit'
+    # PATH: '/opt/bitnami/spark/bin:$PATH'
+    # PATH: '$SPARK_HOME/bin:$PATH'
     # yamllint disable rule:line-length
     # Use simple http server on scheduler for health checks
     # See https://airflow.apache.org/docs/apache-airflow/stable/administration-and-deployment/logging-monitoring/check-health.html#scheduler-health-check-server
@@ -78,6 +84,7 @@ x-airflow-common:
     - ${AIRFLOW_PROJ_DIR:-.}/logs:/opt/airflow/logs
     - ${AIRFLOW_PROJ_DIR:-.}/config:/opt/airflow/config
     - ${AIRFLOW_PROJ_DIR:-.}/plugins:/opt/airflow/plugins
+    - ${AIRFLOW_PROJ_DIR:-.}/scripts:/opt/airflow/scripts
   user: "${AIRFLOW_UID:-50000}:0"
   depends_on:
     &airflow-common-depends-on
@@ -276,57 +283,95 @@ services:
       - de_network
 
 
-  #######################
-  ##   Apache Spark    ##
-  #######################
-  # spark-master:
-  #   image: custom-spark-image
-  #   container_name: spark-master
-  #   hostname: spark-master
-  #   # command: bin/spark-class org.apache.spark.deploy.master.Master
+  ########################
+  ##    Apache Spark    ##
+  ########################
+  spark-master:
+    image: bitnami/spark:3.3.2
+    container_name: spark-master
+    hostname: spark-master
+    command: bin/spark-class org.apache.spark.deploy.master.Master
+    environment:
+      - SPARK_MODE=master
+      - SPARK_LOCAL_IP=spark-master
+      - SPARK_RPC_AUTHENTICATION_ENABLED=no
+      - SPARK_RPC_ENCRYPTION_ENABLED=no
+      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
+      - SPARK_MASTER_URL=spark://spark-master:7077
+      - SPARK_SSL_ENABLED=no
+      - JAVA_HOME=/opt/bitnami/java
+      - SPARK_HOME=/opt/bitnami/spark
+    volumes:
+      - ./init-scripts:/docker-entrypoint-initdb.d
+      - ./spark-defaults.conf:/opt/bitnami/spark/conf/spark-defaults.conf
+      # - ./spark-env.sh:/opt/bitnami/spark/conf/spark-env.sh
+    expose:
+      - "7077"
+    ports:
+      - "7077:7077"
+      - "9090:8080"
+    networks:
+      - de_network
+
+  spark-worker:
+    image: bitnami/spark:3.3.2
+    # container_name: spark-worker
+    depends_on: 
+      - spark-master
+    command: bin/spark-class org.apache.spark.deploy.worker.Worker spark://spark-master:7077
+    deploy: 
+      replicas: 3
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_WORKER_CORES=1
+      - SPARK_WORKER_MEMORY=1g
+      - SPARK_MASTER_URL=spark://spark-master:7077
+      - SPARK_RPC_AUTHENTICATION_ENABLED=no
+      - SPARK_RPC_ENCRYPTION_ENABLED=no
+      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
+      - SPARK_SSL_ENABLED=no
+      - JAVA_HOME=/opt/bitnami/java
+      - SPARK_HOME=/opt/bitnami/spark
+    volumes:
+      - ./data:/opt/spark-data
+    networks:
+      - de_network
+
+
+  # ##########################
+  # ##   PySpark Notebook   ##
+  # ##########################
+  # pyspark-notebook:
+  #   image: jupyter/all-spark-notebook
+  #   container_name: pyspark-notebook
+  #   command: [ "start-notebook.sh", "--NotebookApp.token=" ]
   #   environment:
-  #     - SPARK_MODE=master
-  #     - SPARK_LOCAL_IP=spark-master
-  #     - SPARK_RPC_AUTHENTICATION_ENABLED=no
-  #     - SPARK_RPC_ENCRYPTION_ENABLED=no
-  #     - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
-  #     - SPARK_SSL_ENABLED=no
-  #   volumes:
-  #     - ./data:/opt/spark-data
-  #     - ./spark-defaults.conf:/opt/bitnami/spark/conf/spark-defaults.conf
-  #   expose:
-  #     - "7077"
+  #     - JUPYTER_ENABLE_LAB=yes
+  #     - GRANT_SUDO=yes
   #   ports:
-  #     - "7077:7077"
-  #     - "8081:8081"
-  #   networks:
-  #     - de_network
-
-  # spark-worker:
-  #   image: custom-spark-image
-  #   depends_on: 
-  #     - spark-master
-  #   # command: bin/spark-class org.apache.spark.deploy.worker.Worker spark://spark-master:7077
-  #   deploy: 
-  #     replicas: 3
-  #   environment:
-  #     - SPARK_MODE=worker
-  #     - SPARK_WORKER_CORES=2
-  #     - SPARK_WORKER_MEMORY=2g
-  #     - SPARK_MASTER_URL=spark://spark-master:7077
-  #     - SPARK_RPC_AUTHENTICATION_ENABLED=no
-  #     - SPARK_RPC_ENCRYPTION_ENABLED=no
-  #     - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
-  #     - SPARK_SSL_ENABLED=no
+  #     - 8888:8888
   #   volumes:
-  #     - ./data:/opt/spark-data
+  #     - ./:/home/jovyan/work
   #   networks:
   #     - de_network
 
 
-  #######################
-  ##   Data Pipeline   ##
-  #######################
+  ###################
+  ##   Cassandra   ##
+  ###################
+  cassandra:
+    image: cassandra:latest
+    container_name: cassandra
+    hostname: cassandra
+    ports:
+      - "9042:9042"
+    environment:
+      - MAX_HEAP_SIZE=512M
+      - HEAP_NEWSIZE=100M
+      - CASSANDRA_USERNAME=cassandra
+      - CASSANDRA_PASSWORD=cassandra
+    networks:
+      - de_network
 
 
 networks:
