@@ -1,7 +1,10 @@
 kafka-python-ng==2.2.3
 kafka-python==2.0.2
 apache-airflow-providers-apache-kafka==1.6.1
-pyspark==3.5.0
+apache-airflow-providers-apache-spark==4.11.3
+apache-airflow-providers-common-compat==1.2.2
+pyspark==3.3.2
+cassandra-driver==3.29.2
 # python-dotenv==1.0.1
 # minio==7.2.10
 # yfinance==0.2.48
