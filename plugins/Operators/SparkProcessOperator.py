@@ -1,4 +1,4 @@
-# from __future__ import annotations
+from __future__ import annotations
 
 import os
 import logging
@@ -52,18 +52,29 @@ class SparkProcessOperator(BaseOperator):
         s_conn = None
         
         try:
+            # SPARK_HOME = '/opt/bitnami/spark'
+            # spark_submit_path = os.path.join(SPARK_HOME, 'bin', 'spark-submit')
+            
+            # Kiểm tra nếu spark-submit tồn tại
+            # if not os.path.isfile(spark_submit_path):
+            #     raise FileNotFoundError(f"Spark submit script not found at {spark_submit_path}")
+
+            # print(f"Using spark-submit from: {spark_submit_path}")
+            
             if self._config is not None:
                 s_conn: SparkSession = SparkSession.builder \
                         .appName("{}-{}".format(self.appName, datetime.today())) \
-                        .config("spark.hadoop.fs.s3a.endpoint", "http://" + str(self._config["endpoint_url"])) \
-                        .config("spark.hadoop.fs.s3a.access.key", str(self._config["aws_access_key_id"])) \
-                        .config("spark.hadoop.fs.s3a.secret.key", str(self._config["aws_secret_access_key"])) \
-                        .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem") \
-                        .config("spark.hadoop.fs.s3a.path.style.access", "true") \
-                        .config("spark.jars.packages", "org.apache.spark:spark-sql-kafka-0-10_2.13:3.5.0,"
-                                                       "com.datastax.spark:spark-cassandra-connector_2.13:3.5.0") \
-                        .config("spark.driver.extraJavaOptions", "-Djava.library.path=/opt/bitnami/spark/lib") \
-                        .config("spark.executor.extraJavaOptions", "-Djava.library.path=/opt/bitnami/spark/lib") \
+                        .master("spark://spark-master:7077") \
+                        .config("spark.sql.streaming.checkpointLocation.criticalErrorPolicy", "FAIL") \
+                        .config("spark.sql.streaming.checkpointLocation.enable", True) \
+                        .config("spark.jars.packages", "org.apache.spark:spark-sql-kafka-0-10_2.12:3.3.2,"
+                                                "com.datastax.spark:spark-cassandra-connector_2.12:3.3.0") \
+                        .config('spark.cassandra.connection.host', 'cassandra') \
+                        .config("spark.cassandra.connection.port", "9042") \
+                        .config("spark.sql.extensions", "com.datastax.spark.connector.CassandraSparkExtensions") \
+                        .config("spark.sql.catalog.cassandra", "com.datastax.spark.connector.datasource.CassandraCatalog") \
+                        .config("spark.cassandra.auth.username", "cassandra") \
+                        .config("spark.cassandra.auth.password", "cassandra") \
                         .getOrCreate()
                         
                 s_conn.sparkContext.setLogLevel("ERROR")
@@ -86,9 +97,8 @@ class SparkProcessOperator(BaseOperator):
                         .format("kafka") \
                         .option("kafka.bootstrap.servers", "kafka:9092") \
                         .option("subscribe", topic_name) \
-                        .option("startingOffsets", "earliest").load() \
-                        .select(F.from_json(F.col("value").cast("string"), schema).alias("json_data")) \
-                        .select("json_data.*")                                
+                        .option("startingOffsets", "earliest") \
+                        .load()                             
                                     
                     logger.info("kafka dataframe created successfully")
                     return streaming_df
