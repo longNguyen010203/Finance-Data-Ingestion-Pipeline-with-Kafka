@@ -8,23 +8,20 @@ from pyspark.sql.types import (
     TimestampType,
     FloatType,
     IntegerType,
-    StringType
+    StringType,
+    ArrayType
 )
 
 
 
 schema = StructType([
-    StructField("Datetime", TimestampType(), True),
-    StructField("Open", FloatType(), True),
-    StructField("High", FloatType(), True),
-    StructField("Low", FloatType(), True),
-    StructField("Close", FloatType(), True),
-    StructField("Adj Close", FloatType(), True),
-    StructField("Volume", IntegerType(), True),
-    StructField("Dividends", FloatType(), True),
-    StructField("Stock Splits", FloatType(), True),
-    StructField("ticker", StringType(), True)
+    StructField("c", ArrayType(StringType()), True),
+    StructField("p", FloatType(), True),
+    StructField("s", StringType(), True),
+    StructField("t", IntegerType(), True),
+    StructField("v", IntegerType(), True),
 ])
+
 
 
 def process_stocktrade_data_realtime(data: DataFrame) -> DataFrame:
