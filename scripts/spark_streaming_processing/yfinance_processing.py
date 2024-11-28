@@ -12,16 +12,17 @@ from pyspark.sql.types import (
 )
 
 
+
 schema = StructType([
-    StructField("datetime", TimestampType(), True),
-    StructField("open", FloatType(), True),
-    StructField("high", FloatType(), True),
-    StructField("low", FloatType(), True),
-    StructField("close", FloatType(), True),
-    StructField("adj_close", FloatType(), True),
-    StructField("volume", IntegerType(), True),
-    StructField("dividends", FloatType(), True),
-    StructField("stock_splits", FloatType(), True),
+    StructField("Datetime", TimestampType(), True),
+    StructField("Open", FloatType(), True),
+    StructField("High", FloatType(), True),
+    StructField("Low", FloatType(), True),
+    StructField("Close", FloatType(), True),
+    StructField("Adj Close", FloatType(), True),
+    StructField("Volume", IntegerType(), True),
+    StructField("Dividends", FloatType(), True),
+    StructField("Stock Splits", FloatType(), True),
     StructField("ticker", StringType(), True)
 ])
 
