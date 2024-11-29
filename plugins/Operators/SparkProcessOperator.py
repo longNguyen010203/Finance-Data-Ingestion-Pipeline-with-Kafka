@@ -105,7 +105,3 @@ class SparkProcessOperator(BaseOperator):
         
         except Exception as e:
             logger.warning(f"kafka dataframe could not be created because: {e}")
-            
-            
-    def streaming_OHLCV_data_process(self) -> DataFrame:
-        pass

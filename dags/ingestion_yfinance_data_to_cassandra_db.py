@@ -37,6 +37,9 @@ logging.basicConfig(level=logging.INFO)
 
 
 
+CASSANDRA_KEYSPACE="finance"
+CASSANDRA_TABLE_NAME="stock_data"
+KAFKA_TOPIC_NAME="yfinance_stock"
 
 # Define the DAG
 default_args = {
@@ -105,19 +108,20 @@ def connect_to_cassandra():
 def create_keyspace(**kwargs) -> None:
     session = connect_to_cassandra()
     session.execute("""
-        CREATE KEYSPACE IF NOT EXISTS finance 
-        WITH replication = {
+        CREATE KEYSPACE IF NOT EXISTS {} 
+        WITH replication = {{
             'class': 'SimpleStrategy', 
             'replication_factor': 1
-        }; """)
-    logger.info("Keyspace 'finance' created.")
+        }}; """.format(CASSANDRA_KEYSPACE))
+    logger.info(f"Keyspace {CASSANDRA_KEYSPACE} created.")
     
     
 def create_table(**kwargs):
     session = connect_to_cassandra()
-    session.set_keyspace('finance')
-    session.execute("""
-        CREATE TABLE IF NOT EXISTS stock_data (
+    session.set_keyspace(f"{CASSANDRA_KEYSPACE}")
+    session.execute(f"""
+        CREATE TABLE IF NOT EXISTS {CASSANDRA_TABLE_NAME} (
+            id UUID, 
             datetime timestamp,
             open float,
             high float,
@@ -128,26 +132,26 @@ def create_table(**kwargs):
             dividends float,
             stock_splits float,
             ticker text,
-            PRIMARY KEY (datetime)
+            PRIMARY KEY (id)
         );
     """)
-    logger.info("Table 'stock_data' created in keyspace 'finance'.")
+    logger.info(f"Table {CASSANDRA_TABLE_NAME} created in keyspace {CASSANDRA_KEYSPACE}.")
 
     
 
 @dag(
-    dag_id="YahooFinanceApi_to_Minio_v2019",
+    dag_id="YahooFinanceApi_to_Cassandra_v105",
     default_args=default_args,
     start_date=datetime(2024, 11, 15),
     schedule_interval="0 23 * * Mon,Wed,Fri",
-    tags=["YahooFinanceApi", "ETL", "Data Engineer", "Minio"],
+    tags=["YahooFinanceApi", "ETL", "Data Engineer", "Cassandra"],
     catchup=False
 )
-def etl_pipeline_YahooFinanceApi_to_Minio() -> None:
+def etl_pipeline_YahooFinanceApi_to_Cassandra() -> None:
     
-    #---------------------------------------------------------#
-    # Data ingestion pipeline from Yahoo Finance API to Minio #
-    #---------------------------------------------------------#
+    #-------------------------------------------------------------#
+    # Data ingestion pipeline from Yahoo Finance API to Cassandra #
+    #-------------------------------------------------------------#
     
     #------------------#
     # Connection Kafka #
@@ -166,17 +170,17 @@ def etl_pipeline_YahooFinanceApi_to_Minio() -> None:
         
         try:
             admin_client = KafkaAdminClient(bootstrap_servers=["kafka:9092"])
-            topic_name = "yfinance_stock"
+            topic_name = KAFKA_TOPIC_NAME
             
             # Check if topic already exists
             if admin_client is not None:
                 existing_topics = admin_client.list_topics()
                 if topic_name not in existing_topics:
-                    topic = NewTopic(name="yfinance_stock", num_partitions=1, replication_factor=1)
+                    topic = NewTopic(name=KAFKA_TOPIC_NAME, num_partitions=1, replication_factor=1)
                     admin_client.create_topics(new_topics=[topic], validate_only=False)
                     logger.info(f"Create success {topic} topic.")
                 else: 
-                    logger.info(f"Topic {topic_name} already exists.")
+                    logger.info(f"Topic {KAFKA_TOPIC_NAME} already exists.")
             else: 
                 logger.warning(f"admin client error")
             
@@ -207,7 +211,7 @@ def etl_pipeline_YahooFinanceApi_to_Minio() -> None:
         kafka_config_id="t5",
         task_id="wait_financial_message_sensor",
         topics=["{{ ti.xcom_pull(key='topic_name') }}"],
-        apply_function="ingestion_yfinance_data_to_minio.await_financial",
+        apply_function="ingestion_yfinance_data_to_cassandra_db.await_financial",
         poll_timeout=360,
         poll_interval=5,
         xcom_push_key="retrieved_message",
@@ -248,14 +252,27 @@ def etl_pipeline_YahooFinanceApi_to_Minio() -> None:
         logger.info("Create Spark Session and connect Kafka Success.")
         
         select_df = spark_streaming_df.selectExpr("CAST(value AS STRING)") \
-            .select(F.from_json(F.col('value'), yfinance_processing.schema).alias('data')).select("data.*")
+            .select(F.from_json(F.col('value'), yfinance_processing.schema) \
+            .alias('data')).select("data.*") \
+            .select(
+                F.col('Datetime').alias('datetime'),
+                F.col('Open').alias('open'),
+                F.col('High').alias('high'),
+                F.col('Low').alias('low'),
+                F.col('Close').alias('close'),
+                F.col('Adj Close').alias('adj_close'),
+                F.col('Volume').alias('volume'),
+                F.col('Dividends').alias('dividends'),
+                F.col('Stock Splits').alias('stock_splits'),
+                F.col('ticker')
+            ) \
+            .withColumn("id", F.expr("uuid()")) 
             
-        
         logging.info("Streaming is being started...")            
         streaming_query = select_df.writeStream \
             .foreachBatch(lambda batch_df, _: batch_df.write \
                 .format("org.apache.spark.sql.cassandra") \
-                .options(table="stock_data", keyspace="finance") \
+                .options(table=f"{CASSANDRA_TABLE_NAME}", keyspace=f"{CASSANDRA_KEYSPACE}") \
                 .mode("append") \
                 .save()) \
             .outputMode("update") \
@@ -289,4 +306,4 @@ def etl_pipeline_YahooFinanceApi_to_Minio() -> None:
     connect_kafka >> create_topic_yahoo_financial_kafka() >> wait_financial_message_sensor
     wait_financial_message_sensor >> processing_with_spark_task
 
-etl_pipeline_YahooFinanceApi_to_Minio()
+etl_pipeline_YahooFinanceApi_to_Cassandra()

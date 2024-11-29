@@ -6,3 +6,11 @@ __pycache__/
 
 data/
 kafka_data/
+
+spark_jars/
+
+csv/
+final_output.parquet/
+output/
+
+init-scripts/

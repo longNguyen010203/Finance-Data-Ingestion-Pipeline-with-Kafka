@@ -5,7 +5,7 @@ from pyspark.sql import DataFrame
 from pyspark.sql.types import (
     StructType, 
     StructField, 
-    TimestampType,
+    LongType,
     FloatType,
     IntegerType,
     StringType,
@@ -18,7 +18,7 @@ schema = StructType([
     StructField("c", ArrayType(StringType()), True),
     StructField("p", FloatType(), True),
     StructField("s", StringType(), True),
-    StructField("t", IntegerType(), True),
+    StructField("t", LongType(), True),
     StructField("v", IntegerType(), True),
 ])
 

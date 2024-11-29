@@ -93,7 +93,7 @@ class StockFinnhubMetrics:
                             topic=StockFinnhubMetrics.topic_name,
                             value=record_data
                         )
-                        producer.flush()
+                        # producer.flush()
                         logger.info(f"Collect success {record_data}")
                         
                     else: logger.warning(f"Duplicate record skipped: {record_data}")
@@ -156,6 +156,6 @@ class StockFinnhubMetrics:
 if __name__ == "__main__":
     finnhubApi = StockFinnhubMetrics(
         api_key=os.getenv("API_KEY"),
-        topic_name=""
+        topic_name="finnhub_stock"
     )
     finnhubApi.finnhub_websocket_collect()
