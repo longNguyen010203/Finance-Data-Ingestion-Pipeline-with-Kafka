@@ -19,3 +19,14 @@ In this project, I built a real-time data ingestion pipeline with Apache Kafka a
 
 <img src="./images/workflow_financial.png" style="width: 100%;">
 
+## 📦 Technologies
+
+- `Yahoo Finance API`
+- `Finnhub Stock API`
+- `Apache Kafka`
+- `Apache Spark`
+- `Cassandra`
+- `Power BI`
+- `Jupyter Notebook`
+- `Apache Airflow`
+- `Docker`
